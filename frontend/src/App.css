@@ -1371,3 +1371,421 @@ img {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Panel de mensajeria
+   ========================================================================== */
+
+.mensajeria {
+  display: grid;
+  gap: 20px;
+}
+
+.mensajeria-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+.mensajeria-aviso {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.mensajeria-bloque {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.mensajeria-bloque h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.mensajeria-ayuda {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.mensajeria-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.mensajeria-leyenda {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+/* --- El topico --- */
+
+.mensajeria-topico {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.mensajeria-topico-etiqueta {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.mensajeria-topico strong {
+  font-size: 1rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+/* --- Las tres colas --- */
+
+.mensajeria-colas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.mensajeria-cola {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  background: var(--bg);
+}
+
+.mensajeria-cola.con-alerta {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+}
+
+.mensajeria-cola header {
+  display: grid;
+  gap: 6px;
+}
+
+.mensajeria-cola h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.mensajeria-cola-filtro {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mensajeria-patron {
+  justify-self: start;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.mensajeria-patron.fanout {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.mensajeria-patron.selectivo {
+  background: var(--surface-soft);
+  color: var(--primary-dark);
+}
+
+.mensajeria-contadores {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mensajeria-contadores > div {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.mensajeria-contadores > div.alerta {
+  background: #fffbeb;
+  border-color: var(--secondary);
+}
+
+.mensajeria-contadores dt {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mensajeria-contadores dd {
+  margin: 2px 0 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.mensajeria-politicas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.mensajeria-politicas strong {
+  color: var(--text);
+}
+
+.mensajeria-alarma {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.mensajeria-alarma.estado-alarm {
+  background: #fffbeb;
+  border-color: var(--secondary);
+  color: #92400e;
+}
+
+/* --- Contenido de la DLQ --- */
+
+.mensajeria-dlq {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.mensajeria-dlq-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.mensajeria-dlq-lista li {
+  display: grid;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 0.76rem;
+}
+
+.mensajeria-dlq-lista code {
+  font-size: 0.72rem;
+  color: var(--primary-dark);
+  word-break: break-all;
+}
+
+.mensajeria-dlq-intento {
+  color: var(--muted);
+}
+
+.mensajeria-dlq-causa {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+/* --- Consumidores --- */
+
+.mensajeria-consumidores {
+  display: grid;
+  gap: 12px;
+}
+
+.mensajeria-consumidor {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  background: var(--bg);
+}
+
+.mensajeria-consumidor-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mensajeria-instancias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mensajeria-punto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.mensajeria-punto::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mensajeria-punto.activo {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.mensajeria-punto.pausado {
+  color: #92400e;
+  border-color: var(--secondary);
+  background: #fffbeb;
+}
+
+.mensajeria-falla select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 9px 12px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* --- Actividad en vivo --- */
+
+.mensajeria-actividad {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.mensajeria-actividad li {
+  display: grid;
+  grid-template-columns: auto auto auto auto 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--bg);
+  border-left: 3px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.mensajeria-actividad li.resultado-procesado {
+  border-left-color: var(--primary);
+}
+
+.mensajeria-actividad li.resultado-reintento {
+  border-left-color: var(--secondary);
+  background: #fffbeb;
+}
+
+.mensajeria-actividad li.resultado-derivado_a_dlq {
+  border-left-color: #b91c1c;
+  background: #fef2f2;
+}
+
+.mensajeria-actividad li.resultado-duplicado {
+  border-left-color: #0369a1;
+  background: #f0f9ff;
+}
+
+.mensajeria-actividad-hora {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+}
+
+.mensajeria-actividad-instancia {
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.mensajeria-actividad-cola {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mensajeria-actividad-resultado {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mensajeria-actividad-detalle {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .mensajeria-actividad li {
+    grid-template-columns: auto 1fr;
+  }
+
+  .mensajeria-actividad-detalle {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mensajeria-actividad {
+    scroll-behavior: auto;
+  }
+}

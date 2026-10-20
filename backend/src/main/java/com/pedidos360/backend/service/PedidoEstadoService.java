@@ -37,7 +37,7 @@ public class PedidoEstadoService {
         Set<RolUsuario> rolesPermitidos = destinosPermitidos.get(destino);
         if (!rolesPermitidos.contains(rolSolicitante)) {
             throw new RolNoAutorizadoException(
-                    "El rol %s no puede aplicar la transición %s -> %s".formatted(rolSolicitante, actual, destino));
+                    "El rol %s no puede aplicar la transicion %s -> %s".formatted(rolSolicitante, actual, destino));
         }
 
         pedido.setEstado(destino);

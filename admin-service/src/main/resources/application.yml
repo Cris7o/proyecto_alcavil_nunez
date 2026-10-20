@@ -1,0 +1,164 @@
+spring:
+  application:
+    name: admin-service
+
+server:
+  port: ${PORT:8080}
+
+# ===========================================================================
+# TOPOLOGIA DE MENSAJERIA DE PEDIDO360
+# ===========================================================================
+# Este bloque es la fuente de verdad de toda la mensajeria. Nombres, politicas
+# de retencion, visibility timeouts, Redrive Policy y filtros de suscripcion
+# estan declarados aqui y en ningun otro lugar: ninguna clase Java del proyecto
+# tiene un nombre de cola o de topico escrito en el codigo.
+#
+# POST /admin/topologia aplica todo esto sobre AWS, y es idempotente.
+# ===========================================================================
+pedido360:
+  # -------------------------------------------------------------------------
+  # Origenes que pueden operar la mensajeria desde el navegador
+  # -------------------------------------------------------------------------
+  # El panel de mensajeria del frontend corre en otro puerto, asi que sin esto
+  # el navegador bloquearia cada llamada. Se enumeran los origenes en lugar de
+  # usar comodin: un comodin dejaria que cualquier pagina abierta operara las
+  # colas.
+  cors:
+    origenes-permitidos:
+      - http://localhost:4173    # frontend servido localmente para la demostracion
+      - http://localhost:5173    # frontend en modo desarrollo
+      - https://pedidos360.netlify.app
+
+  mensajeria:
+    region: ${AWS_REGION:us-east-1}
+
+    # Declara la topologia al arrancar. Dejarlo en true hace que reconstruir el
+    # entorno despues de un reinicio del laboratorio sea levantar el servicio.
+    declarar-al-iniciar: ${DECLARAR_TOPOLOGIA:true}
+
+    # Prefijo con el que se reconocen los recursos del proyecto al listarlos.
+    prefijo: pedido360-
+
+    topico:
+      nombre: pedido360-eventos-pedido
+
+    # -----------------------------------------------------------------------
+    # Instancias del microservicio de consumidores
+    # -----------------------------------------------------------------------
+    # Las ordenes de pausa y reanudacion se reenvian a todas. Son dos porque la
+    # demostracion de disponibilidad levanta dos instancias sobre la misma cola.
+    consumidores:
+      instancias:
+        - http://localhost:8081
+        - http://localhost:8082
+
+    # -----------------------------------------------------------------------
+    # Las tres colas, una por dominio funcional
+    # -----------------------------------------------------------------------
+    colas:
+
+      # === 1. NOTIFICACIONES AL CLIENTE ===================================
+      - id: notificaciones
+        nombre: pedido360-notificaciones
+        # 4 dias. Una notificacion de pedido vieja no sirve: avisarle a alguien
+        # el viernes que su pedido del lunes esta listo es peor que no avisarle.
+        # Pasado ese plazo, el mensaje se descarta solo.
+        retencion-segundos: 345600
+        # 30 segundos. Enviar un aviso es rapido; si el consumidor no termino en
+        # 30 segundos, algo anda mal y conviene que otro lo intente.
+        visibilidad-segundos: 30
+        # Long polling: el consumidor espera hasta 20 segundos a que haya algo,
+        # en lugar de preguntar en vacio. Baja el costo y la latencia.
+        espera-larga-segundos: 20
+        # Red de seguridad de AWS. El consumidor deriva al tercer intento para
+        # poder adjuntar la causa; esto actua solo si el proceso muere antes.
+        max-receive-count: 5
+        justificacion: >-
+          Retencion corta (4 dias) porque el valor de una notificacion caduca.
+          Visibility timeout bajo (30 s) porque el envio es una operacion rapida.
+        dlq:
+          nombre: pedido360-notificaciones-dlq
+          # 14 dias, el maximo que permite SQS. Un mensaje que fallo hay que
+          # alcanzar a diagnosticarlo, y eso puede tomar dias.
+          retencion-segundos: 1209600
+          justificacion: >-
+            Retencion maxima (14 dias) para tener margen de diagnostico. La
+            limpieza es manual, con POST /admin/dlq/notificaciones/purga.
+        suscripcion:
+          raw-message-delivery: true
+          patron: entrega selectiva
+          # Solo los eventos que le interesan al cliente final. Los estados
+          # intermedios (en preparacion, en reparto) nunca llegan a esta cola.
+          filtro:
+            tipoEvento:
+              - PEDIDO_CREADO
+              - PEDIDO_LISTO
+              - PEDIDO_ENTREGADO
+              - PEDIDO_CANCELADO
+
+      # === 2. DOCUMENTOS: COMANDA Y BOLETA ===============================
+      - id: documentos
+        nombre: pedido360-documentos
+        # 14 dias. Una comanda o una boleta es un documento que hay que emitir
+        # igual, aunque el sistema haya estado caido dos semanas.
+        retencion-segundos: 1209600
+        # 60 segundos. Generar un documento es mas lento que enviar un aviso, y
+        # un visibility timeout corto haria que otro consumidor tomara el mismo
+        # mensaje mientras el primero todavia lo esta escribiendo.
+        visibilidad-segundos: 60
+        espera-larga-segundos: 20
+        # Mas tolerante que las otras: perder un documento tiene mas costo.
+        max-receive-count: 8
+        justificacion: >-
+          Retencion larga (14 dias) porque el documento hay que emitirlo igual
+          pasado el incidente. Visibility timeout de 60 s porque generarlo es
+          mas lento que notificar.
+        dlq:
+          nombre: pedido360-documentos-dlq
+          retencion-segundos: 1209600
+          justificacion: >-
+            Retencion maxima. Es la DLQ mas critica: un documento en la DLQ es
+            un documento que el negocio todavia debe emitir, asi que se
+            reprocesa antes que purgar.
+        suscripcion:
+          raw-message-delivery: true
+          patron: entrega selectiva
+          # Mas estrecho que notificaciones: solo al nacer el pedido (comanda de
+          # cocina) y al entregarlo (boleta). Dos filtros distintos sobre el
+          # mismo topico es lo que hace de esto entrega selectiva.
+          filtro:
+            tipoEvento:
+              - PEDIDO_CREADO
+              - PEDIDO_ENTREGADO
+
+      # === 3. AUDITORIA: BITACORA COMPLETA ===============================
+      - id: auditoria
+        nombre: pedido360-auditoria
+        # 7 dias. Suficiente para revisar un reclamo de la semana; la bitacora
+        # de largo plazo no es trabajo de una cola.
+        retencion-segundos: 604800
+        visibilidad-segundos: 30
+        espera-larga-segundos: 20
+        max-receive-count: 5
+        justificacion: >-
+          Retencion intermedia (7 dias) para cubrir reclamos de la semana sin
+          acumular indefinidamente. Es la cola que no puede perder eventos,
+          pero si puede atrasarse, y por eso esta separada de las otras dos.
+        dlq:
+          nombre: pedido360-auditoria-dlq
+          retencion-segundos: 1209600
+          justificacion: >-
+            Retencion maxima para poder reconstruir la bitacora completa
+            reprocesando lo que haya fallado.
+        suscripcion:
+          raw-message-delivery: true
+          patron: fanout
+          # SIN FILTRO. Esta cola recibe absolutamente todos los eventos del
+          # topico, y es la que demuestra el patron fanout: cada evento
+          # publicado aparece aqui, incluso los que las otras dos descartan.
+          filtro: {}
+
+logging:
+  level:
+    com.pedidos360.admin: INFO
+    software.amazon.awssdk: WARN

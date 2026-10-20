@@ -1,1 +1,30 @@
+# Herramientas locales
 .claude/
+.vscode/
+.idea/
+
+# ---------------------------------------------------------------------------
+# Credenciales: nada de esto entra al repositorio
+# ---------------------------------------------------------------------------
+# Las credenciales del Learner Lab cambian en cada sesion y se pasan por
+# variables de entorno. En EC2 las aporta el perfil de instancia.
+.env
+.env.*
+*.env
+credentials
+aws-credentials*
+*.pem
+*.ppk
+
+# ---------------------------------------------------------------------------
+# Salidas de ejecucion
+# ---------------------------------------------------------------------------
+# Comandas y boletas que genera el consumidor de documentos
+documentos-generados/
+
+# Capturas de pantalla de la consola de AWS (evidencia de la presentacion,
+# no codigo del proyecto)
+Pedido360-capturas/
+
+# Logs
+*.log

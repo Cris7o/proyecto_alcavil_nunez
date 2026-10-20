@@ -1,8 +1,10 @@
 package com.pedidos360.backend.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -11,6 +13,9 @@ import com.pedidos360.backend.dto.PedidoRequest;
 import com.pedidos360.backend.dto.PedidoResponse;
 import com.pedidos360.backend.exception.RecursoNoEncontradoException;
 import com.pedidos360.backend.exception.RolNoAutorizadoException;
+import com.pedidos360.backend.messaging.EventoPedido;
+import com.pedidos360.backend.messaging.PublicadorEventos;
+import com.pedidos360.backend.messaging.TipoEvento;
 import com.pedidos360.backend.model.EstadoPedido;
 import com.pedidos360.backend.model.ItemPedido;
 import com.pedidos360.backend.model.Pedido;
@@ -25,12 +30,14 @@ public class PedidoService {
     private final PedidoRepository pedidoRepository;
     private final ProductoService productoService;
     private final PedidoEstadoService pedidoEstadoService;
+    private final PublicadorEventos publicadorEventos;
 
     public PedidoService(PedidoRepository pedidoRepository, ProductoService productoService,
-            PedidoEstadoService pedidoEstadoService) {
+            PedidoEstadoService pedidoEstadoService, PublicadorEventos publicadorEventos) {
         this.pedidoRepository = pedidoRepository;
         this.productoService = productoService;
         this.pedidoEstadoService = pedidoEstadoService;
+        this.publicadorEventos = publicadorEventos;
     }
 
     public PedidoResponse crear(PedidoRequest request, Usuario cliente) {
@@ -52,7 +59,9 @@ public class PedidoService {
             pedido.getItems().add(item);
         });
 
-        return aResponse(pedidoRepository.save(pedido));
+        PedidoResponse respuesta = aResponse(pedidoRepository.save(pedido));
+        publicarEvento(TipoEvento.PEDIDO_CREADO, respuesta, cliente, null);
+        return respuesta;
     }
 
     public List<PedidoResponse> listarPorCliente(Usuario cliente) {
@@ -80,8 +89,32 @@ public class PedidoService {
             throw new RolNoAutorizadoException("Un cliente solo puede cancelar sus propios pedidos");
         }
 
+        EstadoPedido estadoAnterior = pedido.getEstado();
         pedidoEstadoService.aplicarTransicion(pedido, nuevoEstado, solicitante.getRol());
-        return aResponse(pedidoRepository.save(pedido));
+
+        PedidoResponse respuesta = aResponse(pedidoRepository.save(pedido));
+        publicarEvento(TipoEvento.desdeEstado(nuevoEstado), respuesta, pedido.getCliente(), estadoAnterior);
+        return respuesta;
+    }
+
+    /**
+     * Arma el evento y lo entrega al publicador. Vive en una sola linea del
+     * flujo de negocio para que agregar o quitar mensajeria no implique tocar
+     * las reglas del pedido.
+     */
+    private void publicarEvento(TipoEvento tipo, PedidoResponse pedido, Usuario cliente,
+            EstadoPedido estadoAnterior) {
+        publicadorEventos.publicar(new EventoPedido(
+                UUID.randomUUID().toString(),
+                tipo,
+                pedido.id(),
+                estadoAnterior == null ? null : estadoAnterior.name(),
+                pedido.estado().name(),
+                cliente.getId(),
+                cliente.getNombre(),
+                cliente.getEmail(),
+                pedido.total(),
+                Instant.now()));
     }
 
     private Pedido obtenerEntidad(Long id) {

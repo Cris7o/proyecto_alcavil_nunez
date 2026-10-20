@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: mensajeria-service
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      sqs:
+        # Si una cola no existe, el servicio falla al arrancar en lugar de
+        # crearla. Crearla automaticamente la dejaria sin DLQ ni Redrive Policy
+        # y sin las politicas de retencion: la topologia la declara el
+        # microservicio administrador, y es la unica fuente de verdad.
+        queue-not-found-strategy: fail
+
+server:
+  # Puerto del canal de control interno. La segunda instancia se levanta con
+  # --server.port=8082 para que las dos puedan convivir en el mismo equipo.
+  port: ${PORT:8081}
+
+# ---------------------------------------------------------------------------
+# Identificador de la instancia
+# ---------------------------------------------------------------------------
+# Se agrega al patron de log para poder distinguir las dos instancias cuando
+# compiten por la misma cola. Se pasa con --pedido360.instancia=A
+pedido360:
+  instancia: ${INSTANCIA:unica}
+
+  documentos:
+    # Donde se escriben las comandas y boletas que genera el dominio de
+    # documentos. Fuera del proyecto para que no se versionen.
+    directorio: ${DOCUMENTOS_DIR:./documentos-generados}
+
+  # -------------------------------------------------------------------------
+  # Mensajeria: nombres centralizados
+  # -------------------------------------------------------------------------
+  # Unico lugar del microservicio donde aparece el nombre de un recurso de AWS.
+  # Los consumidores los leen desde aqui con placeholders en @SqsListener, y las
+  # clases de dominio no los conocen.
+  mensajeria:
+    topico:
+      nombre: pedido360-eventos-pedido
+
+    colas:
+      # Avisos al cliente. Suscrita con filtro: solo los eventos que le
+      # interesan al cliente final.
+      notificaciones:
+        id: notificaciones
+        nombre: pedido360-notificaciones
+        dlq: pedido360-notificaciones-dlq
+        max-reintentos: 3
+
+      # Comandas de cocina y boletas de entrega. Suscrita con un filtro mas
+      # estrecho: solo la creacion y la entrega.
+      documentos:
+        id: documentos
+        nombre: pedido360-documentos
+        dlq: pedido360-documentos-dlq
+        # Mas tolerante: generar un documento es mas caro y vale la pena
+        # insistir mas antes de rendirse.
+        max-reintentos: 5
+
+      # Bitacora completa. Suscrita SIN filtro: recibe todos los eventos, y es
+      # la que demuestra el patron fanout.
+      auditoria:
+        id: auditoria
+        nombre: pedido360-auditoria
+        dlq: pedido360-auditoria-dlq
+        max-reintentos: 3
+
+logging:
+  # El nombre de la instancia queda en cada linea: imprescindible para la
+  # demostracion con dos instancias sobre la misma cola.
+  pattern:
+    level: "%5p [${pedido360.instancia:unica}]"
+  level:
+    com.pedidos360.mensajeria: INFO
+    io.awspring.cloud.sqs: INFO
