@@ -33,6 +33,7 @@ Sobre eso, la segunda etapa agrega una **capa de mensajería asíncrona** con Am
 | [`docs/PUESTA-EN-MARCHA.md`](docs/PUESTA-EN-MARCHA.md) | Paso a paso de AWS, cómo levantar todo, cómo verificarlo y qué hacer si algo falla |
 | [`docs/arquitectura.md`](docs/arquitectura.md) | Diagrama de arquitectura y recorrido de un mensaje hasta su confirmación, reintento o DLQ |
 | [`docs/presentacion.md`](docs/presentacion.md) | Qué mostrar, en qué orden y qué explicar en cada parte |
+| [`docs/INFORME-PRUEBAS.md`](docs/INFORME-PRUEBAS.md) | Las pruebas de la mensajería, relacionadas con cada indicador de la pauta, con su evidencia |
 
 Cada carpeta es un proyecto independiente con su propio `pom.xml` o `package.json`.
 

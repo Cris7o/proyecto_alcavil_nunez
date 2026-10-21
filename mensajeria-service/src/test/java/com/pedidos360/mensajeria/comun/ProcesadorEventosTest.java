@@ -78,7 +78,7 @@ class ProcesadorEventosTest {
         assertThat(ejecuciones).hasValue(1);
         assertThat(confirmacion.confirmaciones).isEqualTo(1);
         assertThat(dlq.derivados).isEmpty();
-        assertThat(registroProcesados.yaFueProcesado("evt-1")).isTrue();
+        assertThat(registroProcesados.yaFueProcesado("notificaciones", "evt-1")).isTrue();
     }
 
     @Test
@@ -96,6 +96,25 @@ class ProcesadorEventosTest {
         assertThat(ejecuciones).hasValue(1);
         assertThat(confirmacion.confirmaciones).isEqualTo(2);
         assertThat(dlq.derivados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("El mismo evento en otra cola no es un duplicado: el fanout lo entrega a las tres")
+    void elMismoEventoEnOtraColaSeProcesa() {
+        AtomicInteger ejecuciones = new AtomicInteger();
+        Cola auditoria = new Cola();
+        auditoria.setId("auditoria");
+        auditoria.setNombre("pedido360-auditoria");
+        auditoria.setDlq("pedido360-auditoria-dlq");
+        auditoria.setMaxReintentos(3);
+
+        procesador.procesar(cola, mensaje(JSON_VALIDO, 1), confirmacion,
+                evento -> ejecuciones.incrementAndGet());
+        procesador.procesar(auditoria, mensaje(JSON_VALIDO, 1), confirmacion,
+                evento -> ejecuciones.incrementAndGet());
+
+        assertThat(ejecuciones).hasValue(2);
+        assertThat(confirmacion.confirmaciones).isEqualTo(2);
     }
 
     @Test

@@ -15,8 +15,11 @@ import org.springframework.stereotype.Component;
  * se reprocesa desde la DLQ. Sin este control, un pedido entregado podria
  * generar dos boletas o dos notificaciones.
  *
- * <p>La clave es el {@code idEvento} que genera el productor, no el id de
- * mensaje de SQS: el id de SQS cambia en cada reenvio, el del evento no.
+ * <p>La clave es la cola mas el {@code idEvento} que genera el productor, no
+ * el id de mensaje de SQS: el id de SQS cambia en cada reenvio, el del evento
+ * no. La cola es parte de la clave porque el fanout entrega el mismo evento a
+ * las tres colas: con solo el idEvento, el segundo consumidor de la misma
+ * instancia lo tomaria por duplicado y lo descartaria sin procesarlo.
  *
  * <p>Limitacion conocida: el registro es local al proceso. Con dos instancias
  * corriendo, cada una lleva su propio registro, asi que un duplicado entregado
@@ -38,14 +41,18 @@ public class RegistroEventosProcesados {
                 }
             }));
 
-    public boolean yaFueProcesado(String idEvento) {
-        return idEvento != null && procesados.contains(idEvento);
+    public boolean yaFueProcesado(String idCola, String idEvento) {
+        return idEvento != null && procesados.contains(clave(idCola, idEvento));
     }
 
-    public void marcarProcesado(String idEvento) {
+    public void marcarProcesado(String idCola, String idEvento) {
         if (idEvento != null) {
-            procesados.add(idEvento);
+            procesados.add(clave(idCola, idEvento));
         }
+    }
+
+    private static String clave(String idCola, String idEvento) {
+        return idCola + ":" + idEvento;
     }
 
     public int cantidadRecordada() {

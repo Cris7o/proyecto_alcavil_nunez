@@ -91,7 +91,7 @@ public class ProcesadorEventos {
         }
 
         // 2. Tolerancia a duplicados. SQS entrega al menos una vez.
-        if (registroProcesados.yaFueProcesado(evento.idEvento())) {
+        if (registroProcesados.yaFueProcesado(cola.getId(), evento.idEvento())) {
             log.info("[{}] Duplicado descartado | idEvento={} | tipo={} | intento={}",
                     cola.getId(), evento.idEvento(), evento.tipo(), intento);
             registroActividad.registrar(cola.getId(), Actividad.Resultado.DUPLICADO,
@@ -106,7 +106,7 @@ public class ProcesadorEventos {
             simuladorFallas.aplicarSiCorresponde(cola.getId());
             accionDeDominio.accept(evento);
 
-            registroProcesados.marcarProcesado(evento.idEvento());
+            registroProcesados.marcarProcesado(cola.getId(), evento.idEvento());
             confirmacion.acknowledge();
 
             log.info("[{}] Procesado y confirmado | idEvento={} | tipo={} | pedidoId={} | intento={}",
