@@ -87,3 +87,45 @@ Al volver, B no recibió leases: la KCL 3 asigna según la utilización de cada 
 | `streaming-service` | 20 | OK |
 | `backend` | 3 | OK |
 | `admin-service` | 2 | OK |
+
+## 8. Capturas de evidencia (25 de noviembre de 2026)
+
+Tomadas en una segunda corrida completa, esta vez con la cadena real del Parcial 1:
+- el login de Cognito;
+- API Gateway con el autorizador JWT;
+- el backend en EC2 con RDS.
+
+Desde la consola se recortó la barra superior, donde aparecen el ID de la cuenta y el usuario.
+
+| Captura | Qué muestra |
+|---|---|
+| [K01](evidencias/ep3/K01-streams-lista.png) | Los 3 streams activos en modo aprovisionado |
+| [K02](evidencias/ep3/K02-pedidos-resumen.png) | Resumen de `pedido360-pedidos`: activo, 1 día de retención, aprovisionado |
+| [K03](evidencias/ep3/K03-pedidos-capacidad-etiquetas.png) | 3 particiones, 3 MiB/s de escritura y 6 MiB/s de lectura, etiqueta `claveParticion=pedidoId` |
+| [K04](evidencias/ep3/K04-pedidos-retencion-metricas-shard.png) | Retención de 24 h y métricas mejoradas por partición |
+| [K05](evidencias/ep3/K05-visor-datos-pedidos.png) | Visor de datos: eventos del pedido 1 (clave 1) en el mismo shard y en orden |
+| [K06](evidencias/ep3/K06-registro-json.png) | Un registro abierto: el DTO en JSON |
+| [K07](evidencias/ep3/K07-actividad-4-shards-tras-reshard.png) | `pedido360-actividad` con 4 particiones después del resharding en vivo |
+| [K08](evidencias/ep3/K08-visor-fallidos.png) | Stream de fallidos con 5 registros |
+| [K09](evidencias/ep3/K09-fallido-no-recuperable-json.png) | Un fallido: shard y secuencia de origen, tipo de falla, causa y contenido original |
+| [D01](evidencias/ep3/D01-dynamodb-tablas.png) | Tablas de DynamoDB: 3 de coordinación (KCL) y la de estado |
+| [D02](evidencias/ep3/D02-tabla-coordinacion-A-y-B.png) | Tabla de coordinación de ventas: shards repartidos entre A y B |
+| [D03](evidencias/ep3/D03-tabla-coordinacion-tras-caida-B.png) | La misma tabla después de detener B: todo en A |
+| [C01](evidencias/ep3/C01-alarma-sin-datos-en-alarma.png) | Alarma en ALARMA mientras nadie leía (sin datos = alarma) |
+| [C02](evidencias/ep3/C02-alarma-detalle.png) | Configuración de la alarma |
+| [C03](evidencias/ep3/C03-alarma-ok-historial.png) | Alarma en OK, con el historial gris → rojo → verde |
+| [C04](evidencias/ep3/C04-monitoreo-pedidos.png) | Monitoreo del stream: edad del iterador en 0 |
+| [A01](evidencias/ep3/A01-tablero-en-vivo.png) | Panel Streaming: el tablero se actualiza solo con los pedidos reales |
+| [A02](evidencias/ep3/A02-tabla-coordinacion-panel.png) | La tabla de coordinación desde el administrador, con retraso de 0 ms por shard |
+| [A03](evidencias/ep3/A03-eventos-prueba-duplicado.png) | Evento duplicado: misma clave, mismo shard |
+| [A04](evidencias/ep3/A04-fallidos-panel.png) | Visor de fallidos del panel |
+| [A05](evidencias/ep3/A05-reshard-en-vivo.png) | Resharding en vivo: actividad pasa a `UPDATING` |
+| [L01](evidencias/ep3/L01-log-flujo-exitoso.png) | Logs: procesado y checkpoint en las dos aplicaciones |
+| [L02](evidencias/ep3/L02-log-manejo-errores.png) | Logs: ilegible, inválido, no recuperable, duplicado y reintentos (222 ms → 432 ms → OK) |
+| [L03](evidencias/ep3/L03-log-failover.png) | Logs: A toma los shards de B y sigue desde su checkpoint |
+| [L04](evidencias/ep3/L04-log-sqs-parcial2.png) | Logs: las 3 colas SQS del Parcial 2 siguen procesando |
+| [L05](evidencias/ep3/L05-log-reshard-hijos.png) | Logs: tras el resharding, la KCL toma los shards hijos |
+
+Resultados de esta corrida:
+- **Distribución por shard** (CloudWatch, `pedido360-pedidos`): entrada 2 / 3 / 9 y lectura 6 / 7 / 29. El shard 002 recibió los 5 eventos del pedido 1, que tienen la misma clave.
+- **Caída de B:** A tomó todos sus shards entre 13:29:05 y 13:29:34, unos 35 a 65 s después de detener B.

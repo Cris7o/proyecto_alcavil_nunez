@@ -49,6 +49,9 @@ export default function PanelStreaming() {
   const [ocupado, setOcupado] = useState('')
   const [ultimaPrueba, setUltimaPrueba] = useState(null)
   const [cambios, setCambios] = useState({})
+  // Retrasos medidos a pedido: el refresco periodico no los trae (seria una
+  // lectura por shard cada pocos segundos), asi que se guardan aparte.
+  const [retrasos, setRetrasos] = useState({})
 
   const refrescarTablero = useCallback(async () => {
     try {
@@ -109,7 +112,13 @@ export default function PanelStreaming() {
   const medirRetraso = (nombre) =>
     ejecutar(`retraso-${nombre}`, async () => {
       const detalle = await inspeccionarAplicacion(nombre)
-      setAplicaciones((actuales) => actuales.map((a) => (a.nombre === nombre ? detalle : a)))
+      setRetrasos((actuales) => ({
+        ...actuales,
+        [nombre]: {
+          maximo: detalle.retrasoMaximoMs,
+          porShard: Object.fromEntries(detalle.leases.map((l) => [l.shardId, l.retrasoMs])),
+        },
+      }))
       return detalle
     }, (detalle) => `Retraso maximo de ${nombre}: ${formatearMs(detalle.retrasoMaximoMs)}`)
 
@@ -305,7 +314,7 @@ export default function PanelStreaming() {
           <div key={a.nombre} className="mensajeria-consumidor">
             <div className="mensajeria-consumidor-head">
               <strong>{a.nombre}</strong>
-              <span>stream {a.stream} · retraso maximo {formatearMs(a.retrasoMaximoMs)}</span>
+              <span>stream {a.stream} · retraso maximo {formatearMs(a.retrasoMaximoMs ?? retrasos[a.nombre]?.maximo)}</span>
               <button type="button" className="accion-secundaria" disabled={ocupado === `retraso-${a.nombre}`}
                 onClick={() => medirRetraso(a.nombre)}>
                 Medir retraso
@@ -325,7 +334,7 @@ export default function PanelStreaming() {
                       <td>{l.duenio || '— sin duenio —'}</td>
                       <td><code>{acortarSecuencia(l.checkpoint)}</code></td>
                       <td>{l.leaseCounter ?? '—'}</td>
-                      <td>{formatearMs(l.retrasoMs)}</td>
+                      <td>{formatearMs(l.retrasoMs ?? retrasos[a.nombre]?.porShard[l.shardId])}</td>
                     </tr>
                   ))}
                 </tbody>
