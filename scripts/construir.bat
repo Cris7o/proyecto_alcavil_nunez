@@ -2,7 +2,7 @@
 rem ===========================================================================
 rem  Pedido360 - Construir todo
 rem ===========================================================================
-rem  Compila los tres microservicios y el frontend, y deja los .jar y el dist
+rem  Compila los cuatro microservicios y el frontend, y deja los .jar y el dist
 rem  listos para que presentacion.bat levante todo en segundos.
 rem
 rem  Esto se corre UNA VEZ, cuando cambia el codigo. No el dia de la
@@ -23,19 +23,23 @@ if not exist "%JAVA_HOME%" (
 )
 
 echo.
-echo === 1 de 4: servicio de pedidos ===
+echo === 1 de 5: servicio de pedidos ===
 call "%RAIZ%\backend\mvnw.cmd" -f "%RAIZ%\backend\pom.xml" -q -B package -DskipTests
 if errorlevel 1 goto :fallo
 
-echo === 2 de 4: consumidores ===
+echo === 2 de 5: consumidores SQS ===
 call "%RAIZ%\mensajeria-service\mvnw.cmd" -f "%RAIZ%\mensajeria-service\pom.xml" -q -B package -DskipTests
 if errorlevel 1 goto :fallo
 
-echo === 3 de 4: administrador ===
+echo === 3 de 5: administrador ===
 call "%RAIZ%\admin-service\mvnw.cmd" -f "%RAIZ%\admin-service\pom.xml" -q -B package -DskipTests
 if errorlevel 1 goto :fallo
 
-echo === 4 de 4: frontend ===
+echo === 4 de 5: consumidores Kinesis (streaming) ===
+call "%RAIZ%\streaming-service\mvnw.cmd" -f "%RAIZ%\streaming-service\pom.xml" -q -B package -DskipTests
+if errorlevel 1 goto :fallo
+
+echo === 5 de 5: frontend ===
 pushd "%RAIZ%\frontend"
 if not exist node_modules call npm ci --no-audit --no-fund
 call npm run build

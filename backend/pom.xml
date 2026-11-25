@@ -70,6 +70,11 @@
 			<groupId>io.awspring.cloud</groupId>
 			<artifactId>spring-cloud-aws-starter-sns</artifactId>
 		</dependency>
+		<!-- Productor de Kinesis Data Streams (version gestionada por el BOM de Spring Cloud AWS) -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>kinesis</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>com.mysql</groupId>

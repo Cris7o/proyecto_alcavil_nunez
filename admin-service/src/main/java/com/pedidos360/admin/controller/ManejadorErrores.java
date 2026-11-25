@@ -9,6 +9,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.sns.model.SnsException;
 import software.amazon.awssdk.services.sqs.model.SqsException;
 
@@ -44,6 +46,31 @@ public class ManejadorErrores {
     public ProblemDetail errorDeSns(SnsException e) {
         log.warn("SNS rechazo la operacion: {}", e.getMessage());
         return problema(estadoDe(e.statusCode()), mensajeDe(e.getMessage()));
+    }
+
+    /** Un valor fuera de lo que permite Kinesis (por ejemplo, triplicar shards de una vez). */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail argumentoInvalido(IllegalArgumentException e) {
+        return problema(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
+
+    /**
+     * Errores de Kinesis, DynamoDB o CloudWatch. Los mas comunes en operacion:
+     * cambiar un stream mientras esta UPDATING (ResourceInUse), superar el
+     * limite de resharding o leer con demasiada frecuencia un shard.
+     */
+    @ExceptionHandler(AwsServiceException.class)
+    public ProblemDetail errorDeAws(AwsServiceException e) {
+        log.warn("AWS rechazo la operacion: {}", e.getMessage());
+        return problema(estadoDe(e.statusCode()), mensajeDe(e.getMessage()));
+    }
+
+    /** No hubo respuesta de AWS: red o credenciales vencidas del Learner Lab. */
+    @ExceptionHandler(SdkClientException.class)
+    public ProblemDetail sinConexionAws(SdkClientException e) {
+        log.warn("No se pudo contactar a AWS: {}", e.getMessage());
+        return problema(HttpStatus.BAD_GATEWAY,
+                "No se pudo contactar a AWS. Revisa las credenciales del Learner Lab: " + mensajeDe(e.getMessage()));
     }
 
     /**

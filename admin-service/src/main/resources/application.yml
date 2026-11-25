@@ -158,6 +158,156 @@ pedido360:
           # publicado aparece aqui, incluso los que las otras dos descartan.
           filtro: {}
 
+  # =========================================================================
+  # STREAMING DE PEDIDO360 (Amazon Kinesis Data Streams)
+  # =========================================================================
+  # Fuente de verdad de la plataforma de streaming: streams, aplicaciones
+  # consumidoras, tabla de estado y alarma. Ninguna clase Java tiene uno de
+  # estos nombres o valores escrito. La region es la misma de la mensajeria
+  # (pedido360.mensajeria.region): un solo lugar para toda la aplicacion.
+  #
+  # POST   /admin/streams/topologia   crea o ajusta todo esto en AWS (idempotente)
+  # DELETE /admin/streams/topologia   lo elimina (Kinesis cobra por shard y hora)
+  #
+  # Lo que administra AWS y no el equipo: los servidores, la replicacion de
+  # cada registro en tres zonas de disponibilidad antes de confirmar la
+  # escritura, y el reemplazo de hardware. Lo que administra el equipo: la
+  # cantidad de shards, la retencion, la clave de particion, las aplicaciones
+  # consumidoras y sus tablas de coordinacion.
+  # =========================================================================
+  streaming:
+    prefijo: pedido360-
+
+    # No se crea nada al arrancar: los streams se cobran mientras existan, asi
+    # que se crean a proposito con POST /admin/streams/topologia (o el script
+    # scripts\streaming-crear.bat) y se borran al terminar.
+    declarar-al-iniciar: ${DECLARAR_STREAMS:false}
+
+    streams:
+
+      # === 1. PEDIDOS: ciclo de vida de cada pedido =========================
+      - id: pedidos
+        nombre: pedido360-pedidos
+        # Aprovisionado y no On-Demand: On-Demand no permite fijar la cantidad
+        # de shards (la escala AWS) y cobra por GB ademas de por hora. Con
+        # carga conocida y moderada, aprovisionado es mas barato y predecible.
+        modo-capacidad: PROVISIONED
+        # 3 shards = hasta 3 MB/s o 3.000 registros/s de escritura y 6 MB/s de
+        # lectura compartida. El volumen de pedidos esta muy por debajo; los 3
+        # shards dan paralelismo: hasta 3 instancias por aplicacion consumidora
+        # procesando a la vez, y la caida de una no detiene el stream.
+        shards: 3
+        # 24 horas. En produccion seria 168 (7 dias): los pedidos son el flujo
+        # de mayor valor, una aplicacion nueva podria releer la semana desde
+        # TRIM_HORIZON y un consumidor caido el fin de semana no perderia nada.
+        # El Learner Lab de AWS Academy lo impide: una politica de la
+        # organizacion (SCP) deniega kinesis:IncreaseStreamRetentionPeriod, asi
+        # que 24 h (el minimo) es el unico valor posible aqui. El administrador
+        # si implementa el cambio de retencion; en una cuenta normal funciona.
+        retencion-horas: 24
+        clave-particion: pedidoId
+        # Metricas por shard (de pago): permiten ver la distribucion de la
+        # carga entre shards y detectar uno caliente.
+        metricas-por-shard: [IncomingRecords, OutgoingRecords, IteratorAgeMilliseconds]
+        justificacion: >-
+          Flujo de negocio critico y de volumen moderado. 3 shards para
+          paralelismo entre instancias y holgura ante picos. Retencion de 24 h
+          (lo ideal serian 7 dias para reprocesar la semana, pero el Learner
+          Lab bloquea extenderla). La clave pedidoId garantiza el orden de los
+          eventos de cada pedido y reparte bien la carga.
+
+      # === 2. ACTIVIDAD: interacciones del cliente con el menu ==============
+      - id: actividad
+        nombre: pedido360-actividad
+        modo-capacidad: PROVISIONED
+        # Mismo numero de shards: es el flujo de mas volumen (cada clic es un
+        # evento) y llega en rafagas; 3 shards absorben los picos de la hora
+        # de almuerzo sin throttling.
+        shards: 3
+        # 24 horas, el minimo (y sin costo extra de retencion extendida). Una
+        # tendencia de hace dos dias no sirve: el valor de este flujo caduca
+        # rapido.
+        retencion-horas: 24
+        clave-particion: sesionId
+        metricas-por-shard: [IncomingRecords, OutgoingRecords]
+        justificacion: >-
+          Flujo de alto volumen y bajo valor individual. Retencion minima (24 h)
+          porque la informacion caduca rapido. La clave sesionId ordena los
+          eventos de cada visita y, por su alta cardinalidad, evita shards
+          calientes (productoId concentraria los productos populares).
+
+      # === 3. FALLIDOS: dead letter stream ===================================
+      - id: fallidos
+        nombre: pedido360-fallidos
+        modo-capacidad: PROVISIONED
+        # 1 shard: solo recibe lo que falla, que debe ser excepcional. 1 MB/s
+        # de escritura sobra.
+        shards: 1
+        # 24 horas por la misma restriccion del Learner Lab (lo ideal serian 7
+        # dias, para tener tiempo de diagnosticar y reprocesar un fallido).
+        retencion-horas: 24
+        clave-particion: aplicacion
+        metricas-por-shard: []
+        justificacion: >-
+          Destino de los eventos que una aplicacion no pudo procesar, con su
+          causa y su contenido original. Un shard basta. Retencion de 24 h
+          (lo ideal serian 7 dias; el Learner Lab no permite extenderla).
+
+    # -----------------------------------------------------------------------
+    # Aplicaciones consumidoras (consumer groups)
+    # -----------------------------------------------------------------------
+    # Se ejecutan en streaming-service. Cada una tiene su propia tabla de
+    # coordinacion en DynamoDB, con el mismo nombre: una fila (lease) por shard
+    # con su duenio (leaseOwner) y su checkpoint.
+    aplicaciones:
+      - nombre: pedido360-tablero-ventas
+        stream: pedidos
+        justificacion: >-
+          Analitica de ventas en linea. Lee todos los eventos de pedidos a su
+          propio ritmo.
+      - nombre: pedido360-seguimiento-cocina
+        stream: pedidos
+        justificacion: >-
+          Mide los tiempos de cada etapa y detecta pedidos atrasados. Es otra
+          aplicacion sobre el mismo stream: su checkpoint es independiente, asi
+          que si una se atrasa la otra no se ve afectada.
+      - nombre: pedido360-tendencias-menu
+        stream: actividad
+        justificacion: Ranking de productos y busquedas de la ultima hora.
+
+    # Instancias de streaming-service, para reenviarles las fallas inducidas y
+    # juntar lo que cada una esta consumiendo.
+    consumidores:
+      instancias:
+        - http://localhost:8083
+        - http://localhost:8084
+
+    # Estado derivado de los eventos y marcas de idempotencia (lo usa
+    # streaming-service). On-Demand: el volumen es bajo e irregular.
+    tabla-estado:
+      nombre: pedido360-streaming-estado
+      atributo-ttl: expiraEn
+
+    # -----------------------------------------------------------------------
+    # Alarma de retraso de consumo
+    # -----------------------------------------------------------------------
+    # GetRecords.IteratorAgeMilliseconds = edad del registro mas viejo leido.
+    # Si crece, los consumidores no dan abasto o estan detenidos; si llegara a
+    # la retencion, se perderian eventos sin haberlos procesado.
+    alarma:
+      nombre: pedido360-pedidos-retraso-consumo
+      stream: pedidos
+      metrica: GetRecords.IteratorAgeMilliseconds
+      # 1 minuto de retraso ya es anomalo para un flujo casi en tiempo real.
+      umbral-ms: 60000
+      periodo-segundos: 60
+      periodos-evaluacion: 3
+      # 2 de 3 minutos sobre el umbral: evita falsas alarmas por un pico.
+      datapoints-para-alarma: 2
+      # Sin datos = nadie esta leyendo (la metrica solo se emite cuando hay
+      # GetRecords). Eso tambien es un problema, asi que cuenta como alarma.
+      sin-datos: breaching
+
 logging:
   level:
     com.pedidos360.admin: INFO

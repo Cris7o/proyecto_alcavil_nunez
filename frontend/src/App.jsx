@@ -4,6 +4,7 @@ import { I18n } from 'aws-amplify/utils'
 import '@aws-amplify/ui-react/styles.css'
 import './lib/amplify'
 import { apiRequest } from './lib/api'
+import { registrarActividad } from './lib/actividad'
 import './App.css'
 import { IconBag, IconClock, IconFlame, IconMinus, IconPlus, IconSearch, IconStar, IconTruck } from './components/Icons'
 import PanelPedidos from './views/PanelPedidos'
@@ -238,6 +239,15 @@ function App({ signOut }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Busqueda al stream de actividad: solo cuando el cliente deja de escribir,
+  // para registrar el termino y no cada tecla.
+  useEffect(() => {
+    const termino = searchTerm.trim()
+    if (activeRole !== 'CLIENTE' || termino.length < 3) return undefined
+    const espera = setTimeout(() => registrarActividad('BUSQUEDA', { termino }), 1200)
+    return () => clearTimeout(espera)
+  }, [searchTerm, activeRole])
+
   const filteredProducts = useMemo(() => {
     const normalizedQuery = searchTerm.trim().toLowerCase()
 
@@ -271,9 +281,18 @@ function App({ signOut }) {
     })
 
     showToast(`${product.nombre} agregado al carrito`, 'success')
+    registrarActividad('PRODUCTO_AGREGADO', { productoId: product.id, productoNombre: product.nombre })
   }
 
   const updateCartQuantity = (productId, delta) => {
+    const producto = cart.find((item) => item.id === productId)
+    if (producto) {
+      registrarActividad(delta > 0 ? 'PRODUCTO_AGREGADO' : 'PRODUCTO_QUITADO', {
+        productoId: producto.id,
+        productoNombre: producto.nombre,
+      })
+    }
+
     setCart((currentCart) =>
       currentCart
         .map((item) =>
@@ -462,9 +481,12 @@ function App({ signOut }) {
                 key={categoryItem.id}
                 type="button"
                 className={`category-card ${selectedCategory === categoryItem.id ? 'active' : ''}`}
-                onClick={() =>
+                onClick={() => {
+                  if (selectedCategory !== categoryItem.id) {
+                    registrarActividad('CATEGORIA_FILTRADA', { categoria: categoryItem.label })
+                  }
                   setSelectedCategory(selectedCategory === categoryItem.id ? 'all' : categoryItem.id)
-                }
+                }}
                 aria-pressed={selectedCategory === categoryItem.id}
               >
                 <img src={categoryItem.image} alt="" loading="lazy" width="120" height="120" />

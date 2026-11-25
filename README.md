@@ -13,6 +13,8 @@ En un local de comida hay cuatro personas involucradas en un mismo pedido y ning
 
 Sobre eso, la segunda etapa agrega una **capa de mensajería asíncrona** con Amazon SNS y SQS: cuando un pedido cambia de estado, el sistema publica un evento y tres consumidores independientes reaccionan sin que el cliente tenga que esperarlos.
 
+La tercera etapa agrega **streaming de eventos con Amazon Kinesis Data Streams**. Cada cambio de estado y cada interacción del cliente con el menú quedan en un stream ordenado y retenido. Varias aplicaciones consumidoras lo leen a su propio ritmo para alimentar un tablero de ventas, el seguimiento de cocina y las tendencias del menú en tiempo real. La mensajería de SNS y SQS sigue funcionando igual. El detalle está en [`docs/CAMBIOS-EP3.md`](docs/CAMBIOS-EP3.md).
+
 ---
 
 ## Estructura del repositorio
@@ -21,8 +23,9 @@ Sobre eso, la segunda etapa agrega una **capa de mensajería asíncrona** con Am
 |---|---|---|
 | `backend/` | Servicio de pedidos. API REST del negocio y **productor** de eventos. | 8080 en EC2 |
 | `mensajeria-service/` | **Consumidores** SQS, agrupados por dominio funcional. | 8081 / 8082 |
-| `admin-service/` | **Microservicio administrador** de la mensajería. | 8080 local |
-| `frontend/` | Aplicación React con login vía Cognito y panel de mensajería. | Netlify / 4173 |
+| `streaming-service/` | **Aplicaciones consumidoras** de Kinesis (KCL 3), agrupadas por dominio: ventas, cocina, tendencias. | 8083 / 8084 |
+| `admin-service/` | **Microservicio administrador** de la mensajería y de los streams. | 8080 local |
+| `frontend/` | Aplicación React con login vía Cognito y paneles de mensajería y streaming. | Netlify / 4173 |
 | `scripts/` | Levantar y apagar todo con un doble clic. | — |
 | `docs/` | Puesta en marcha, diagramas y guion de la presentación. | — |
 
@@ -34,6 +37,9 @@ Sobre eso, la segunda etapa agrega una **capa de mensajería asíncrona** con Am
 | [`docs/arquitectura.md`](docs/arquitectura.md) | Diagrama de arquitectura y recorrido de un mensaje hasta su confirmación, reintento o DLQ |
 | [`docs/presentacion.md`](docs/presentacion.md) | Qué mostrar, en qué orden y qué explicar en cada parte |
 | [`docs/INFORME-PRUEBAS.md`](docs/INFORME-PRUEBAS.md) | Las pruebas de la mensajería, relacionadas con cada indicador de la pauta, con su evidencia |
+| [`docs/CAMBIOS-EP3.md`](docs/CAMBIOS-EP3.md) | **Parcial 3**: qué se agregó con Kinesis, por qué y qué hace cada pieza |
+| [`docs/PRUEBAS-EP3.md`](docs/PRUEBAS-EP3.md) | **Parcial 3**: flujo exitoso, flujo fallido, caída de una instancia y cambio en vivo, probados en AWS |
+| [`docs/CUENTA-NUEVA.md`](docs/CUENTA-NUEVA.md) | Cómo montar todo en otra cuenta del Learner Lab |
 
 Cada carpeta es un proyecto independiente con su propio `pom.xml` o `package.json`.
 
@@ -83,6 +89,33 @@ Cada carpeta es un proyecto independiente con su propio `pom.xml` o `package.jso
 El navegador nunca le habla directo al backend: todo entra por API Gateway, que valida el JWT antes de dejar pasar nada. La base de datos no tiene IP pública. El backend valida el token **otra vez** por defensa en profundidad, y recién entonces evalúa si el rol puede hacer la operación.
 
 ---
+
+## El streaming (Parcial 3)
+
+```mermaid
+flowchart LR
+    FE[Frontend React] -->|JWT Cognito| GW[API Gateway] --> BE[backend EC2]
+    BE -->|PutRecord, clave pedidoId| KP[(pedido360-pedidos<br/>3 shards)]
+    BE -->|PutRecords, clave sesionId| KA[(pedido360-actividad<br/>3 shards)]
+    BE --> SNS[SNS → 3 colas SQS<br/>Parcial 2]
+    KP --> V[tablero-ventas]
+    KP --> C[seguimiento-cocina]
+    KA --> T[tendencias-menu]
+    V & C & T -.->|no procesable| KF[(pedido360-fallidos<br/>1 shard)]
+    V & C & T --> DDB[(DynamoDB<br/>leases + estado)]
+    ADM[admin-service] --> KP & KA & KF
+    ADM --> CW[CloudWatch<br/>alarma IteratorAge]
+```
+
+| Stream | Shards | Retención | Clave de partición | Aplicaciones consumidoras |
+|---|---|---|---|---|
+| `pedido360-pedidos` | 3 | 24 h | `pedidoId` | `pedido360-tablero-ventas`, `pedido360-seguimiento-cocina` |
+| `pedido360-actividad` | 3 | 24 h | `sesionId` | `pedido360-tendencias-menu` |
+| `pedido360-fallidos` | 1 | 24 h | `aplicacion` | (dead letter stream) |
+
+- **Configuración centralizada**: el bloque `pedido360.streaming` del `application.yml` o `application.properties` de cada servicio. Los streams, la alarma y la tabla de estado los declara `admin-service` y se aplican con `POST /admin/streams/topologia` o con `scripts\streaming-crear.bat`.
+- **Retención de 24 h**: el Learner Lab deniega extenderla por una política de la organización (SCP). Ver [`docs/CAMBIOS-EP3.md`](docs/CAMBIOS-EP3.md).
+- **Costo**: Kinesis cobra por shard y por hora. Al terminar, `scripts\streaming-eliminar.bat`.
 
 ## La mensajería
 

@@ -1,0 +1,151 @@
+spring:
+  application:
+    name: streaming-service
+
+server:
+  # La segunda instancia se levanta con PORT=8084 (o --server.port=8084) para
+  # demostrar el reparto de shards entre instancias de la misma aplicacion.
+  port: ${PORT:8083}
+
+# ===========================================================================
+# STREAMING DE PEDIDO360 (Amazon Kinesis Data Streams)
+# ===========================================================================
+# Unico lugar de este microservicio donde aparecen la region, los nombres de
+# los streams, los nombres de las aplicaciones consumidoras y los parametros
+# del cliente Kinesis. Ninguna clase Java tiene uno de estos valores escrito.
+#
+# La declaracion de los streams en AWS (shards, retencion, modo de capacidad)
+# la hace el microservicio administrador (admin-service), que es la fuente de
+# verdad de la infraestructura. Aqui solo se nombran para poder leerlos.
+# ===========================================================================
+pedido360:
+  # Nombre de la instancia. Queda en cada linea de log y en el identificador
+  # del worker de la KCL, que es lo que aparece como "leaseOwner" en la tabla
+  # de coordinacion. Se pasa con INSTANCIA=A / INSTANCIA=B.
+  instancia: ${INSTANCIA:unica}
+
+  cors:
+    origenes-permitidos:
+      - http://localhost:4173
+      - http://localhost:5173
+      - https://pedidos360.netlify.app
+
+  streaming:
+    region: ${AWS_REGION:us-east-1}
+
+    # En false la instancia solo sirve su API (tableros y control) y no se
+    # suma al reparto de shards.
+    consumir: ${CONSUMIR:true}
+
+    # Zona horaria con la que se agrupan las ventas por dia y por hora.
+    zona-horaria: America/Santiago
+
+    # -----------------------------------------------------------------------
+    # Streams que lee este servicio
+    # -----------------------------------------------------------------------
+    streams:
+      pedidos: pedido360-pedidos
+      actividad: pedido360-actividad
+      # Destino de los eventos que no se pudieron procesar.
+      fallidos: pedido360-fallidos
+
+    # -----------------------------------------------------------------------
+    # Estado derivado de los eventos (tablero, seguimiento, tendencias)
+    # -----------------------------------------------------------------------
+    # Tabla DynamoDB compartida por todas las instancias: como cada instancia
+    # procesa solo algunos shards, el estado no puede vivir en memoria.
+    # Tambien guarda los idEvento ya procesados (tolerancia a duplicados).
+    tabla-estado: pedido360-streaming-estado
+
+    # -----------------------------------------------------------------------
+    # Cliente Kinesis
+    # -----------------------------------------------------------------------
+    cliente:
+      # Reintentos del SDK ante errores de red y throttling, con espera
+      # exponencial (los aplica el SDK, no el codigo).
+      max-reintentos-sdk: 5
+      timeout-llamada-ms: 10000
+      timeout-intento-ms: 3000
+
+    # -----------------------------------------------------------------------
+    # Lectura (KCL, modo polling)
+    # -----------------------------------------------------------------------
+    # Se usa polling (GetRecords) y no Enhanced Fan-Out: con tres aplicaciones
+    # y bajo volumen, el limite compartido de 2 MB/s y 5 lecturas/s por shard
+    # alcanza, y Enhanced Fan-Out se cobra aparte por consumidor y por shard.
+    lectura:
+      # Registros maximos por llamada a GetRecords.
+      max-registros: 500
+      # Pausa entre lecturas de un mismo shard. Con 3 aplicaciones leyendo el
+      # stream de pedidos son ~3 lecturas/s por shard, bajo el limite de 5.
+      pausa-entre-lecturas-ms: 1000
+      # Tiempo sin renovar un lease para que otra instancia lo tome. Es lo
+      # que define cuanto tarda el reparto cuando una instancia se cae.
+      failover-ms: 10000
+      # Cada cuanto se revisan los shards del stream (detecta resharding).
+      sincronizacion-shards-ms: 60000
+
+    # -----------------------------------------------------------------------
+    # Manejo de errores
+    # -----------------------------------------------------------------------
+    errores:
+      # Intentos totales ante un error transitorio antes de derivar el evento
+      # al stream de fallidos. No se reintenta indefinidamente: un evento no
+      # puede detener el shard.
+      max-intentos: 4
+      # Espera creciente: 200 ms, 400 ms, 800 ms... con tope.
+      espera-base-ms: 200
+      espera-maxima-ms: 3000
+      # Cuanto se recuerda un idEvento procesado. Debe superar la retencion
+      # del stream (7 dias): un evento releido dentro de la retencion tiene
+      # que reconocerse como duplicado.
+      recordar-procesados-horas: 192
+
+    # -----------------------------------------------------------------------
+    # Aplicaciones consumidoras (consumer groups)
+    # -----------------------------------------------------------------------
+    # Cada aplicacion tiene su propia tabla de coordinacion en DynamoDB (con
+    # el mismo nombre) y por lo tanto su propio checkpoint: avanzan de forma
+    # independiente sobre el mismo stream. Todas las instancias que usan el
+    # mismo nombre se reparten los shards de ese stream.
+    aplicaciones:
+      - nombre: pedido360-tablero-ventas
+        stream: pedidos
+        dominio: ventas
+        # Al nacer, lee todo lo retenido: el tablero se reconstruye con los
+        # eventos de los ultimos 7 dias.
+        posicion-inicial: TRIM_HORIZON
+        activa: true
+
+      - nombre: pedido360-seguimiento-cocina
+        stream: pedidos
+        dominio: cocina
+        posicion-inicial: TRIM_HORIZON
+        activa: true
+
+      - nombre: pedido360-tendencias-menu
+        stream: actividad
+        dominio: tendencias
+        # La actividad vieja no aporta a una tendencia "de ahora": arranca
+        # desde lo ultimo publicado.
+        posicion-inicial: LATEST
+        activa: true
+
+    # -----------------------------------------------------------------------
+    # Seguimiento de cocina: cuando un pedido se considera atrasado
+    # -----------------------------------------------------------------------
+    cocina:
+      minutos-maximos:
+        PENDIENTE: 5
+        EN_PREPARACION: 15
+        LISTO: 10
+        EN_REPARTO: 30
+
+logging:
+  pattern:
+    level: "%5p [${pedido360.instancia:unica}]"
+  level:
+    com.pedidos360.streaming: INFO
+    software.amazon.kinesis: WARN
+    software.amazon.kinesis.coordinator: INFO
+    software.amazon.awssdk: WARN

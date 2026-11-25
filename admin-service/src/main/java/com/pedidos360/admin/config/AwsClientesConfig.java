@@ -8,6 +8,8 @@ import org.springframework.web.client.RestClient;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.kinesis.KinesisClient;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
@@ -26,7 +28,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
  * aporta el rol de la instancia.
  */
 @Configuration
-@EnableConfigurationProperties(MensajeriaProperties.class)
+@EnableConfigurationProperties({ MensajeriaProperties.class, StreamingProperties.class })
 public class AwsClientesConfig {
 
     private final Region region;
@@ -54,6 +56,24 @@ public class AwsClientesConfig {
     @Bean
     public CloudWatchClient cloudWatchClient() {
         return CloudWatchClient.builder()
+                .region(region)
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
+    }
+
+    /** Administracion de streams (crear, describir, escalar, retencion, eliminar). */
+    @Bean
+    public KinesisClient kinesisClient() {
+        return KinesisClient.builder()
+                .region(region)
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
+    }
+
+    /** Lectura de las tablas de coordinacion de la KCL y creacion de la tabla de estado. */
+    @Bean
+    public DynamoDbClient dynamoDbClient() {
+        return DynamoDbClient.builder()
                 .region(region)
                 .credentialsProvider(DefaultCredentialsProvider.create())
                 .build();

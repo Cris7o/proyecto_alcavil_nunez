@@ -23,6 +23,8 @@ import com.pedidos360.backend.model.Producto;
 import com.pedidos360.backend.model.RolUsuario;
 import com.pedidos360.backend.model.Usuario;
 import com.pedidos360.backend.repository.PedidoRepository;
+import com.pedidos360.backend.streaming.EventoPedidoStream;
+import com.pedidos360.backend.streaming.PublicadorStreamPedidos;
 
 @Service
 public class PedidoService {
@@ -31,13 +33,16 @@ public class PedidoService {
     private final ProductoService productoService;
     private final PedidoEstadoService pedidoEstadoService;
     private final PublicadorEventos publicadorEventos;
+    private final PublicadorStreamPedidos publicadorStream;
 
     public PedidoService(PedidoRepository pedidoRepository, ProductoService productoService,
-            PedidoEstadoService pedidoEstadoService, PublicadorEventos publicadorEventos) {
+            PedidoEstadoService pedidoEstadoService, PublicadorEventos publicadorEventos,
+            PublicadorStreamPedidos publicadorStream) {
         this.pedidoRepository = pedidoRepository;
         this.productoService = productoService;
         this.pedidoEstadoService = pedidoEstadoService;
         this.publicadorEventos = publicadorEventos;
+        this.publicadorStream = publicadorStream;
     }
 
     public PedidoResponse crear(PedidoRequest request, Usuario cliente) {
@@ -104,8 +109,14 @@ public class PedidoService {
      */
     private void publicarEvento(TipoEvento tipo, PedidoResponse pedido, Usuario cliente,
             EstadoPedido estadoAnterior) {
+        // El mismo idEvento viaja por SNS y por Kinesis: permite correlacionar
+        // en los logs lo que hicieron las colas y lo que hicieron los streams.
+        String idEvento = UUID.randomUUID().toString();
+        Instant ocurridoEn = Instant.now();
+
+        // Mensajeria del Parcial 2 (SNS -> SQS), sin cambios.
         publicadorEventos.publicar(new EventoPedido(
-                UUID.randomUUID().toString(),
+                idEvento,
                 tipo,
                 pedido.id(),
                 estadoAnterior == null ? null : estadoAnterior.name(),
@@ -114,7 +125,25 @@ public class PedidoService {
                 cliente.getNombre(),
                 cliente.getEmail(),
                 pedido.total(),
-                Instant.now()));
+                ocurridoEn));
+
+        // Streaming (Parcial 3): el mismo hecho, en el stream de pedidos.
+        publicadorStream.publicar(new EventoPedidoStream(
+                EventoPedidoStream.VERSION_ACTUAL,
+                idEvento,
+                tipo,
+                pedido.id(),
+                estadoAnterior == null ? null : estadoAnterior.name(),
+                pedido.estado().name(),
+                cliente.getId(),
+                pedido.total(),
+                pedido.items().stream().mapToInt(ItemPedidoResponse::cantidad).sum(),
+                pedido.items().stream()
+                        .map(item -> new EventoPedidoStream.Item(item.productoId(), item.nombreProducto(),
+                                item.cantidad(), item.precioUnitario()))
+                        .toList(),
+                ocurridoEn,
+                EventoPedidoStream.ORIGEN));
     }
 
     private Pedido obtenerEntidad(Long id) {

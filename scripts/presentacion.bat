@@ -7,9 +7,12 @@ rem
 rem    1. administrador  (puerto 8080)  crea la topologia en AWS
 rem    2. consumidor A   (puerto 8081)
 rem    3. consumidor B   (puerto 8082)
-rem    4. frontend       (puerto 4173)
+rem    4. streams de Kinesis (los crea el administrador, ~1 minuto)
+rem    5. streaming A    (puerto 8083)  aplicaciones consumidoras de Kinesis
+rem    6. streaming B    (puerto 8084)  segunda instancia: se reparten los shards
+rem    7. frontend       (puerto 4173)
 rem
-rem  Las cuatro ventanas quedan minimizadas. Al final se abre el navegador.
+rem  Las ventanas quedan minimizadas. Al final se abre el navegador.
 rem
 rem  ANTES: iniciar el lab de AWS Academy y pegar las credenciales en
 rem         %USERPROFILE%\.aws\credentials  (boton "AWS Details" del lab)
@@ -50,9 +53,11 @@ if not exist "%USERPROFILE%\.aws\credentials" (
 
 set ADMIN_JAR=%RAIZ%\admin-service\target\admin-service-0.0.1-SNAPSHOT.jar
 set MENSAJERIA_JAR=%RAIZ%\mensajeria-service\target\mensajeria-service-0.0.1-SNAPSHOT.jar
+set STREAMING_JAR=%RAIZ%\streaming-service\target\streaming-service-0.0.1-SNAPSHOT.jar
 
 if not exist "%ADMIN_JAR%" goto :sin_construir
 if not exist "%MENSAJERIA_JAR%" goto :sin_construir
+if not exist "%STREAMING_JAR%" goto :sin_construir
 if not exist "%RAIZ%\frontend\dist\index.html" goto :sin_construir
 
 rem --- 1. Administrador ------------------------------------------------------
@@ -60,7 +65,7 @@ rem  Arranca primero porque declara la topologia: el topico, las tres colas,
 rem  las tres DLQ, las suscripciones con sus filtros y las alarmas.
 
 echo.
-echo [1/4] Administrador en el puerto 8080...
+echo [1/6] Administrador en el puerto 8080...
 start "Pedido360 - administrador" /min "%JAVA%" %OPCIONES_JVM% -jar "%ADMIN_JAR%"
 
 rem  Esperar a que responda antes de levantar los consumidores: si las colas
@@ -86,19 +91,34 @@ rem --- 2 y 3. Los dos consumidores -------------------------------------------
 rem  Dos instancias sobre las mismas colas. SQS reparte los mensajes entre
 rem  ellas; si se detiene una, la otra sigue sin perder nada.
 
-echo [2/4] Consumidor A en el puerto 8081...
+echo [2/6] Consumidor A en el puerto 8081...
 start "Pedido360 - consumidor A" /min "%JAVA%" %OPCIONES_JVM% -jar "%MENSAJERIA_JAR%" --server.port=8081 --pedido360.instancia=A
 
-echo [3/4] Consumidor B en el puerto 8082...
+echo [3/6] Consumidor B en el puerto 8082...
 start "Pedido360 - consumidor B" /min "%JAVA%" %OPCIONES_JVM% -jar "%MENSAJERIA_JAR%" --server.port=8082 --pedido360.instancia=B
 
-rem --- 4. Frontend -----------------------------------------------------------
+rem --- 4. Streams de Kinesis y aplicaciones consumidoras ----------------------
+rem  El administrador crea (o ajusta) los 3 streams, la tabla de estado y la
+rem  alarma. Es idempotente: si ya existen, no cambia nada. Kinesis cobra por
+rem  shard y hora: al terminar, correr streaming-eliminar.bat.
+
+echo [4/6] Creando los streams de Kinesis (puede tardar un minuto)...
+curl -s -o nul -m 240 -X POST http://localhost:8080/admin/streams/topologia
+if errorlevel 1 echo       [ATENCION] No se pudieron crear los streams: revisa la ventana del administrador.
+
+rem  Dos instancias de las mismas aplicaciones consumidoras: la KCL reparte los
+rem  shards entre ellas a traves de la tabla de coordinacion en DynamoDB.
+echo [5/6] Streaming A en el puerto 8083 y B en el 8084...
+start "Pedido360 - streaming A" /min "%JAVA%" -Xmx384m -jar "%STREAMING_JAR%" --server.port=8083 --pedido360.instancia=A
+start "Pedido360 - streaming B" /min "%JAVA%" -Xmx384m -jar "%STREAMING_JAR%" --server.port=8084 --pedido360.instancia=B
+
+rem --- 6. Frontend -----------------------------------------------------------
 rem  Se sirve local, no desde Netlify: el panel de mensajeria le habla al
 rem  administrador que corre en este equipo, y un sitio HTTPS llamando al
 rem  propio equipo es algo que el navegador bloquea o pregunta.
 rem  http://localhost cuenta como contexto seguro, asi que Cognito funciona.
 
-echo [4/4] Frontend en el puerto 4173...
+echo [6/6] Frontend en el puerto 4173...
 start "Pedido360 - frontend" /min cmd /c "cd /d "%RAIZ%\frontend" && npm run preview -- --port 4173"
 
 timeout /t 6 /nobreak >nul
@@ -112,8 +132,12 @@ echo   Aplicacion     http://localhost:4173
 echo   Administrador  http://localhost:8080/admin/topologia
 echo   Consumidor A   http://localhost:8081
 echo   Consumidor B   http://localhost:8082
+echo   Streaming A    http://localhost:8083/control/estado
+echo   Streaming B    http://localhost:8084/control/estado
 echo.
-echo  Entra como admin@pedido360.cl y abre la pestana Mensajeria.
+echo  Entra como admin@pedido360.cl: pestanas Mensajeria y Streaming.
+echo.
+echo  AL TERMINAR: streaming-eliminar.bat (Kinesis cobra mientras exista)
 echo.
 echo  Para apagar todo: detener.bat
 echo ===========================================================

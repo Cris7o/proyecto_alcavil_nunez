@@ -52,6 +52,16 @@
 			<groupId>software.amazon.awssdk</groupId>
 			<artifactId>sns</artifactId>
 		</dependency>
+		<!-- Administracion de Kinesis Data Streams -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>kinesis</artifactId>
+		</dependency>
+		<!-- Tablas de coordinacion de la KCL y tabla de estado del streaming -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>dynamodb</artifactId>
+		</dependency>
 		<!-- Metricas y estado de la alarma de las DLQ -->
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>

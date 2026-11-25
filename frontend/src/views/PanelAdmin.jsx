@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import PedidoCard from '../components/PedidoCard'
 import PanelMensajeria from './PanelMensajeria'
+import PanelStreaming from './PanelStreaming'
 import { IconBan, IconReceipt } from '../components/Icons'
 import { formatearMoneda } from '../lib/pedidos'
 
@@ -9,6 +10,7 @@ const PESTANAS = [
   { id: 'productos', etiqueta: 'Catálogo' },
   { id: 'usuarios', etiqueta: 'Usuarios' },
   { id: 'mensajeria', etiqueta: 'Mensajería' },
+  { id: 'streaming', etiqueta: 'Streaming' },
 ]
 
 const FORM_VACIO = { nombre: '', descripcion: '', precio: '' }
@@ -249,6 +251,12 @@ export default function PanelAdmin({
       {pestana === 'mensajeria' && (
         <div id="panel-mensajeria" role="tabpanel" aria-labelledby="tab-mensajeria">
           <PanelMensajeria />
+        </div>
+      )}
+
+      {pestana === 'streaming' && (
+        <div id="panel-streaming" role="tabpanel" aria-labelledby="tab-streaming">
+          <PanelStreaming />
         </div>
       )}
 

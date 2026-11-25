@@ -1789,3 +1789,120 @@ img {
     scroll-behavior: auto;
   }
 }
+/* ---------------------------------------------------------------------------
+   Panel de streaming (Kinesis, Parcial 3)
+   --------------------------------------------------------------------------- */
+.streaming-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.streaming-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.streaming-kpi span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.streaming-kpi strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.streaming-kpi.alerta {
+  border-color: #f59e0b;
+  background: #fff7e6;
+}
+
+.streaming-columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.streaming-columnas h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+.streaming-ranking {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.streaming-ranking li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 0.88rem;
+}
+
+.streaming-ranking strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.streaming-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 10px;
+}
+
+.streaming-tabla th,
+.streaming-tabla td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.streaming-tabla th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.streaming-cambio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.streaming-cambio input {
+  width: 74px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.streaming-fallas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.streaming-fallas label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.streaming-fallas select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
